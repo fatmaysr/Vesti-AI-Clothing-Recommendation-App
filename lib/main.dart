@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -45,6 +46,24 @@ class ClothingItem {
       style: map['style'] as String?,
     );
   }
+}
+
+// Open-Meteo'dan hava durumunu çeken basit fonksiyon (İzmit koordinatları)
+Future<double?> fetchCurrentTemperature() async {
+  try {
+    final url = Uri.parse(
+      'https://api.open-meteo.com/v1/forecast?latitude=40.77&longitude=29.94&current_weather=true',
+    );
+    final response = await http.get(url);
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return (data['current_weather']['temperature'] as num).toDouble();
+    }
+  } catch (e) {
+    // Hava durumu alınamazsa null döneriz, uygulama yine de çalışır
+  }
+  return null;
 }
 
 class VestiApp extends StatelessWidget {
@@ -159,6 +178,23 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
     );
   }
 
+  // Kullanıcıya "bugün neredesin" diye soran küçük bir seçim penceresi
+  Future<String?> _askContext() async {
+    return showDialog<String>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text('Bugün neredesin?'),
+        children: [
+          for (final option in ['Üniversite', 'İş', 'Ev', 'Spor'])
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(context, option),
+              child: Text(option),
+            ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _generateOutfit() async {
     if (clothes.length < 2) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -169,13 +205,23 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
       return;
     }
 
+    final selectedContext = await _askContext();
+    if (selectedContext == null) return; // kullanıcı vazgeçti
+
     setState(() {
       isGeneratingOutfit = true;
     });
 
     try {
-      // 1. Geçmiş tercihleri (style_preferences) tablosundan çekelim
-      final prefsData = await supabase.from('style_preferences').select();
+      // Hava durumunu çek
+      final temperature = await fetchCurrentTemperature();
+
+      // Geçmiş tercihleri (style_preferences) tablosundan çekelim
+      final prefsData = await supabase
+          .from('style_preferences')
+          .select()
+          .order('score', ascending: false)
+          .limit(5);
       final preferencesList = prefsData as List;
 
       final itemsPayload = clothes
@@ -190,10 +236,15 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
           )
           .toList();
 
-      // 2. Edge function'a hem kıyafetleri hem de tercihleri gönderelim
+      // Edge function'a kıyafetleri, tercihleri, hava durumunu ve durumu gönderelim
       final response = await supabase.functions.invoke(
         'generate-outfit',
-        body: {'items': itemsPayload, 'preferences': preferencesList},
+        body: {
+          'items': itemsPayload,
+          'preferences': preferencesList,
+          'weather': temperature,
+          'context': selectedContext,
+        },
       );
 
       final result = response.data as Map<String, dynamic>;
@@ -251,7 +302,7 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
                       label: Text(
                         isGeneratingOutfit
                             ? 'Kombin hazırlanıyor...'
-                            : 'Kombin Oluştur',
+                            : 'Bugünün Kombini',
                       ),
                     ),
                   ),
@@ -308,7 +359,7 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
   }
 }
 
-// Yeni ekran: AI'ın önerdiği kombini gösteriyor ve puanlama butonlarını içeriyor
+// AI'ın önerdiği kombini gösteriyor ve puanlama butonlarını içeriyor
 class OutfitScreen extends StatefulWidget {
   final List<ClothingItem> items;
   final String reason;
@@ -322,17 +373,14 @@ class OutfitScreen extends StatefulWidget {
 class _OutfitScreenState extends State<OutfitScreen> {
   bool hasVoted = false;
 
-  // Puanlama mantığı: Beğenilirse (+1), beğenilmezse (-1) puan ekler/günceller
   Future<void> _rateOutfit(int scoreChange) async {
     if (hasVoted) return;
 
     try {
       for (var item in widget.items) {
-        // Renk tercihi varsa puanla
         if (item.color != null && item.color!.isNotEmpty) {
           await _updatePreference('color', item.color!, scoreChange);
         }
-        // Stil tercihi varsa puanla
         if (item.style != null && item.style!.isNotEmpty) {
           await _updatePreference('style', item.style!, scoreChange);
         }
@@ -363,7 +411,6 @@ class _OutfitScreenState extends State<OutfitScreen> {
   }
 
   Future<void> _updatePreference(String type, String value, int change) async {
-    // Önce bu özellik tablomuzda var mı bakalım
     final existing = await supabase
         .from('style_preferences')
         .select()
@@ -372,14 +419,12 @@ class _OutfitScreenState extends State<OutfitScreen> {
         .maybeSingle();
 
     if (existing != null) {
-      // Varsa skoru güncelle
       final int currentScore = existing['score'] as int;
       await supabase
           .from('style_preferences')
           .update({'score': currentScore + change})
           .eq('id', existing['id']);
     } else {
-      // Yoksa yeni satır ekle
       await supabase.from('style_preferences').insert({
         'attribute_type': type,
         'attribute_value': value,
@@ -422,6 +467,7 @@ class _OutfitScreenState extends State<OutfitScreen> {
                             crossAxisCount: 2,
                             crossAxisSpacing: 12,
                             mainAxisSpacing: 12,
+                            childAspectRatio: 0.75,
                           ),
                       itemCount: widget.items.length,
                       itemBuilder: (context, index) {
@@ -450,7 +496,6 @@ class _OutfitScreenState extends State<OutfitScreen> {
                     ),
             ),
             const SizedBox(height: 16),
-            // Beğendim / Beğenmedim Butonları
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
@@ -563,7 +608,6 @@ class _AddClothingScreenState extends State<AddClothingScreen> {
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
-            Spacer(), // Veya uygun bir yapı
             GestureDetector(
               onTap: _pickImage,
               child: Container(
