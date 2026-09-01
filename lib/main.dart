@@ -101,6 +101,7 @@ class WardrobeScreen extends StatefulWidget {
 class _WardrobeScreenState extends State<WardrobeScreen> {
   List<ClothingItem> clothes = [];
   bool isLoading = true;
+  bool isGeneratingOutfit = false;
 
   @override
   void initState() {
@@ -158,47 +159,315 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
     );
   }
 
+  Future<void> _generateOutfit() async {
+    if (clothes.length < 2) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Kombin oluşturmak için en az 2 kıyafet ekle.'),
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      isGeneratingOutfit = true;
+    });
+
+    try {
+      // 1. Geçmiş tercihleri (style_preferences) tablosundan çekelim
+      final prefsData = await supabase.from('style_preferences').select();
+      final preferencesList = prefsData as List;
+
+      final itemsPayload = clothes
+          .map(
+            (item) => {
+              'id': item.id,
+              'name': item.name,
+              'category': item.category,
+              'color': item.color,
+              'style': item.style,
+            },
+          )
+          .toList();
+
+      // 2. Edge function'a hem kıyafetleri hem de tercihleri gönderelim
+      final response = await supabase.functions.invoke(
+        'generate-outfit',
+        body: {'items': itemsPayload, 'preferences': preferencesList},
+      );
+
+      final result = response.data as Map<String, dynamic>;
+      final List<dynamic> selectedIds = result['itemIds'] ?? [];
+      final String reason = result['reason'] ?? '';
+
+      final selectedItems = clothes
+          .where((item) => selectedIds.contains(item.id))
+          .toList();
+
+      if (mounted) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) =>
+                OutfitScreen(items: selectedItems, reason: reason),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Kombin oluşturulamadı: $e')));
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          isGeneratingOutfit = false;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Dolabım')),
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
-          : clothes.isEmpty
-          ? const Center(
-              child: Text('Henüz kıyafet yok.', style: TextStyle(fontSize: 18)),
-            )
-          : ListView.builder(
-              itemCount: clothes.length,
-              itemBuilder: (context, index) {
-                final item = clothes[index];
-
-                // AI bilgileri varsa alt yazı olarak göster
-                final subtitleParts = [
-                  if (item.category != null) item.category,
-                  if (item.color != null) item.color,
-                  if (item.style != null) item.style,
-                ];
-                final subtitle = subtitleParts.join(' • ');
-
-                return ListTile(
-                  leading: item.imageUrl != null
-                      ? CircleAvatar(
-                          backgroundImage: NetworkImage(item.imageUrl!),
-                        )
-                      : const Icon(Icons.checkroom),
-                  title: Text(item.name),
-                  subtitle: subtitle.isNotEmpty ? Text(subtitle) : null,
-                  trailing: IconButton(
-                    icon: const Icon(Icons.close, color: Colors.red),
-                    onPressed: () => _confirmDelete(index),
+          : Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: isGeneratingOutfit ? null : _generateOutfit,
+                      icon: isGeneratingOutfit
+                          ? const SizedBox(
+                              height: 16,
+                              width: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.auto_awesome),
+                      label: Text(
+                        isGeneratingOutfit
+                            ? 'Kombin hazırlanıyor...'
+                            : 'Kombin Oluştur',
+                      ),
+                    ),
                   ),
-                );
-              },
+                ),
+                Expanded(
+                  child: clothes.isEmpty
+                      ? const Center(
+                          child: Text(
+                            'Henüz kıyafet yok.',
+                            style: TextStyle(fontSize: 18),
+                          ),
+                        )
+                      : ListView.builder(
+                          itemCount: clothes.length,
+                          itemBuilder: (context, index) {
+                            final item = clothes[index];
+                            final subtitleParts = [
+                              if (item.category != null) item.category,
+                              if (item.color != null) item.color,
+                              if (item.style != null) item.style,
+                            ];
+                            final subtitle = subtitleParts.join(' • ');
+
+                            return ListTile(
+                              leading: item.imageUrl != null
+                                  ? CircleAvatar(
+                                      backgroundImage: NetworkImage(
+                                        item.imageUrl!,
+                                      ),
+                                    )
+                                  : const Icon(Icons.checkroom),
+                              title: Text(item.name),
+                              subtitle: subtitle.isNotEmpty
+                                  ? Text(subtitle)
+                                  : null,
+                              trailing: IconButton(
+                                icon: const Icon(
+                                  Icons.close,
+                                  color: Colors.red,
+                                ),
+                                onPressed: () => _confirmDelete(index),
+                              ),
+                            );
+                          },
+                        ),
+                ),
+              ],
             ),
       floatingActionButton: FloatingActionButton(
         onPressed: _goToAddClothing,
         child: const Icon(Icons.add),
+      ),
+    );
+  }
+}
+
+// Yeni ekran: AI'ın önerdiği kombini gösteriyor ve puanlama butonlarını içeriyor
+class OutfitScreen extends StatefulWidget {
+  final List<ClothingItem> items;
+  final String reason;
+
+  const OutfitScreen({super.key, required this.items, required this.reason});
+
+  @override
+  State<OutfitScreen> createState() => _OutfitScreenState();
+}
+
+class _OutfitScreenState extends State<OutfitScreen> {
+  bool hasVoted = false;
+
+  // Puanlama mantığı: Beğenilirse (+1), beğenilmezse (-1) puan ekler/günceller
+  Future<void> _rateOutfit(int scoreChange) async {
+    if (hasVoted) return;
+
+    try {
+      for (var item in widget.items) {
+        // Renk tercihi varsa puanla
+        if (item.color != null && item.color!.isNotEmpty) {
+          await _updatePreference('color', item.color!, scoreChange);
+        }
+        // Stil tercihi varsa puanla
+        if (item.style != null && item.style!.isNotEmpty) {
+          await _updatePreference('style', item.style!, scoreChange);
+        }
+      }
+
+      setState(() {
+        hasVoted = true;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              scoreChange > 0
+                  ? 'Geri bildirimin kaydedildi! Sevdiklerin önceliklendirilecek.'
+                  : 'Geri bildirimin kaydedildi.',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Oy kaydedilirken hata oluştu: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _updatePreference(String type, String value, int change) async {
+    // Önce bu özellik tablomuzda var mı bakalım
+    final existing = await supabase
+        .from('style_preferences')
+        .select()
+        .eq('attribute_type', type)
+        .eq('attribute_value', value)
+        .maybeSingle();
+
+    if (existing != null) {
+      // Varsa skoru güncelle
+      final int currentScore = existing['score'] as int;
+      await supabase
+          .from('style_preferences')
+          .update({'score': currentScore + change})
+          .eq('id', existing['id']);
+    } else {
+      // Yoksa yeni satır ekle
+      await supabase.from('style_preferences').insert({
+        'attribute_type': type,
+        'attribute_value': value,
+        'score': change,
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Önerilen Kombin')),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (widget.reason.isNotEmpty)
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue[50],
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.auto_awesome, color: Colors.blue),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(widget.reason)),
+                  ],
+                ),
+              ),
+            const SizedBox(height: 16),
+            Expanded(
+              child: widget.items.isEmpty
+                  ? const Center(child: Text('AI bir kombin bulamadı.'))
+                  : GridView.builder(
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
+                            crossAxisSpacing: 12,
+                            mainAxisSpacing: 12,
+                          ),
+                      itemCount: widget.items.length,
+                      itemBuilder: (context, index) {
+                        final item = widget.items[index];
+                        return Column(
+                          children: [
+                            Expanded(
+                              child: item.imageUrl != null
+                                  ? Image.network(
+                                      item.imageUrl!,
+                                      fit: BoxFit.cover,
+                                    )
+                                  : Container(
+                                      color: Colors.grey[300],
+                                      child: const Icon(
+                                        Icons.checkroom,
+                                        size: 40,
+                                      ),
+                                    ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(item.name),
+                          ],
+                        );
+                      },
+                    ),
+            ),
+            const SizedBox(height: 16),
+            // Beğendim / Beğenmedim Butonları
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                ElevatedButton.icon(
+                  onPressed: hasVoted ? null : () => _rateOutfit(-1),
+                  icon: const Icon(Icons.thumb_down, color: Colors.red),
+                  label: const Text('Bana göre değil'),
+                ),
+                ElevatedButton.icon(
+                  onPressed: hasVoted ? null : () => _rateOutfit(1),
+                  icon: const Icon(Icons.favorite, color: Colors.pink),
+                  label: const Text('Beğendim'),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -249,7 +518,6 @@ class _AddClothingScreenState extends State<AddClothingScreen> {
           .from('clothing-images')
           .getPublicUrl(fileName);
 
-      // Fotoğraf yüklendi, şimdi AI'a analiz ettirelim
       setState(() {
         statusText = 'AI kıyafeti inceliyor...';
       });
@@ -262,7 +530,6 @@ class _AddClothingScreenState extends State<AddClothingScreen> {
 
         aiResult = response.data as Map<String, dynamic>;
       } catch (e) {
-        // AI analizi başarısız olsa bile kıyafeti kaydetmeye devam edelim
         aiResult = null;
       }
     }
@@ -271,7 +538,6 @@ class _AddClothingScreenState extends State<AddClothingScreen> {
       statusText = 'Kaydediliyor...';
     });
 
-    // İsim boşsa, AI'ın bulduğu kategoriyi isim olarak kullan
     final finalName = _controller.text.isNotEmpty
         ? _controller.text
         : (aiResult?['category'] as String? ?? 'İsimsiz');
@@ -297,6 +563,7 @@ class _AddClothingScreenState extends State<AddClothingScreen> {
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
+            Spacer(), // Veya uygun bir yapı
             GestureDetector(
               onTap: _pickImage,
               child: Container(
