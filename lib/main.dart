@@ -19,6 +19,13 @@ void main() async {
 
 final supabase = Supabase.instance.client;
 
+// ---- Vesti'nin renk paleti ----
+const Color vestiPrimary = Color(0xFF8B5CF6); // canlı mor
+const Color vestiPrimaryLight = Color(
+  0xFFEDE4FF,
+); // açık lila (arka planlar için)
+const Color vestiAccent = Color(0xFFB794F6); // ikincil mor tonu
+
 class ClothingItem {
   final String id;
   final String name;
@@ -48,7 +55,6 @@ class ClothingItem {
   }
 }
 
-// Open-Meteo'dan hava durumunu çeken basit fonksiyon (İzmit koordinatları)
 Future<double?> fetchCurrentTemperature() async {
   try {
     final url = Uri.parse(
@@ -61,7 +67,7 @@ Future<double?> fetchCurrentTemperature() async {
       return (data['current_weather']['temperature'] as num).toDouble();
     }
   } catch (e) {
-    // Hava durumu alınamazsa null döneriz, uygulama yine de çalışır
+    // Hava durumu alınamazsa null döneriz
   }
   return null;
 }
@@ -73,7 +79,77 @@ class VestiApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Vesti',
-      theme: ThemeData(primarySwatch: Colors.blue),
+      theme: ThemeData(
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: vestiPrimary,
+          primary: vestiPrimary,
+          brightness: Brightness.light,
+        ),
+        scaffoldBackgroundColor: const Color(0xFFFAF8FF),
+        fontFamily: 'Roboto',
+
+        appBarTheme: const AppBarTheme(
+          backgroundColor: vestiPrimary,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          centerTitle: false,
+          titleTextStyle: TextStyle(
+            color: Colors.white,
+            fontSize: 22,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: vestiPrimary,
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            elevation: 0,
+            textStyle: const TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 15,
+            ),
+          ),
+        ),
+
+        floatingActionButtonTheme: const FloatingActionButtonThemeData(
+          backgroundColor: vestiPrimary,
+          foregroundColor: Colors.white,
+        ),
+
+        inputDecorationTheme: InputDecorationTheme(
+          filled: true,
+          fillColor: Colors.white,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide.none,
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: const BorderSide(color: vestiPrimary, width: 2),
+          ),
+        ),
+
+        cardTheme: CardThemeData(
+          elevation: 0,
+          color: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+          ),
+        ),
+
+        listTileTheme: ListTileThemeData(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          tileColor: Colors.white,
+        ),
+      ),
       home: const HomeScreen(),
     );
   }
@@ -85,25 +161,56 @@ class HomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Vesti')),
       body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Text('Dolabına hoş geldin!', style: TextStyle(fontSize: 20)),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const WardrobeScreen(),
-                  ),
-                );
-              },
-              child: const Text('Dolabım'),
-            ),
-          ],
+        child: Padding(
+          padding: const EdgeInsets.all(32.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: vestiPrimaryLight,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.checkroom,
+                  size: 64,
+                  color: vestiPrimary,
+                ),
+              ),
+              const SizedBox(height: 24),
+              const Text(
+                'Vesti',
+                style: TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.bold,
+                  color: vestiPrimary,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Dolabına hoş geldin!',
+                style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+              ),
+              const SizedBox(height: 32),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const WardrobeScreen(),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.door_sliding_outlined),
+                  label: const Text('Dolabımı Aç'),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -155,6 +262,7 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('Kıyafeti sil'),
         content: Text('${clothes[index].name} silinsin mi?'),
         actions: [
@@ -178,11 +286,11 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
     );
   }
 
-  // Kullanıcıya "bugün neredesin" diye soran küçük bir seçim penceresi
   Future<String?> _askContext() async {
     return showDialog<String>(
       context: context,
       builder: (context) => SimpleDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('Bugün neredesin?'),
         children: [
           for (final option in ['Üniversite', 'İş', 'Ev', 'Spor'])
@@ -206,17 +314,15 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
     }
 
     final selectedContext = await _askContext();
-    if (selectedContext == null) return; // kullanıcı vazgeçti
+    if (selectedContext == null) return;
 
     setState(() {
       isGeneratingOutfit = true;
     });
 
     try {
-      // Hava durumunu çek
       final temperature = await fetchCurrentTemperature();
 
-      // Geçmiş tercihleri (style_preferences) tablosundan çekelim
       final prefsData = await supabase
           .from('style_preferences')
           .select()
@@ -236,7 +342,6 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
           )
           .toList();
 
-      // Edge function'a kıyafetleri, tercihleri, hava durumunu ve durumu gönderelim
       final response = await supabase.functions.invoke(
         'generate-outfit',
         body: {
@@ -283,7 +388,7 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Dolabım')),
       body: isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator(color: vestiPrimary))
           : Column(
               children: [
                 Padding(
@@ -296,7 +401,10 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
                           ? const SizedBox(
                               height: 16,
                               width: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
                             )
                           : const Icon(Icons.auto_awesome),
                       label: Text(
@@ -309,14 +417,39 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
                 ),
                 Expanded(
                   child: clothes.isEmpty
-                      ? const Center(
-                          child: Text(
-                            'Henüz kıyafet yok.',
-                            style: TextStyle(fontSize: 18),
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.checkroom_outlined,
+                                size: 64,
+                                color: Colors.grey[300],
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                'Henüz kıyafet yok.',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  color: Colors.grey[500],
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Aşağıdaki + butonuyla ekleyebilirsin.',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.grey[400],
+                                ),
+                              ),
+                            ],
                           ),
                         )
-                      : ListView.builder(
+                      : ListView.separated(
+                          padding: const EdgeInsets.all(12),
                           itemCount: clothes.length,
+                          separatorBuilder: (context, index) =>
+                              const SizedBox(height: 8),
                           itemBuilder: (context, index) {
                             final item = clothes[index];
                             final subtitleParts = [
@@ -326,24 +459,45 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
                             ];
                             final subtitle = subtitleParts.join(' • ');
 
-                            return ListTile(
-                              leading: item.imageUrl != null
-                                  ? CircleAvatar(
-                                      backgroundImage: NetworkImage(
-                                        item.imageUrl!,
-                                      ),
-                                    )
-                                  : const Icon(Icons.checkroom),
-                              title: Text(item.name),
-                              subtitle: subtitle.isNotEmpty
-                                  ? Text(subtitle)
-                                  : null,
-                              trailing: IconButton(
-                                icon: const Icon(
-                                  Icons.close,
-                                  color: Colors.red,
+                            return Container(
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: ListTile(
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 4,
                                 ),
-                                onPressed: () => _confirmDelete(index),
+                                leading: CircleAvatar(
+                                  radius: 26,
+                                  backgroundColor: vestiPrimaryLight,
+                                  backgroundImage: item.imageUrl != null
+                                      ? NetworkImage(item.imageUrl!)
+                                      : null,
+                                  child: item.imageUrl == null
+                                      ? const Icon(
+                                          Icons.checkroom,
+                                          color: vestiPrimary,
+                                        )
+                                      : null,
+                                ),
+                                title: Text(
+                                  item.name,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                subtitle: subtitle.isNotEmpty
+                                    ? Text(subtitle)
+                                    : null,
+                                trailing: IconButton(
+                                  icon: const Icon(
+                                    Icons.close,
+                                    color: Colors.redAccent,
+                                  ),
+                                  onPressed: () => _confirmDelete(index),
+                                ),
                               ),
                             );
                           },
@@ -359,7 +513,6 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
   }
 }
 
-// AI'ın önerdiği kombini gösteriyor ve puanlama butonlarını içeriyor
 class OutfitScreen extends StatefulWidget {
   final List<ClothingItem> items;
   final String reason;
@@ -444,16 +597,21 @@ class _OutfitScreenState extends State<OutfitScreen> {
           children: [
             if (widget.reason.isNotEmpty)
               Container(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: Colors.blue[50],
-                  borderRadius: BorderRadius.circular(8),
+                  color: vestiPrimaryLight,
+                  borderRadius: BorderRadius.circular(16),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.auto_awesome, color: Colors.blue),
-                    const SizedBox(width: 8),
-                    Expanded(child: Text(widget.reason)),
+                    const Icon(Icons.auto_awesome, color: vestiPrimary),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        widget.reason,
+                        style: const TextStyle(color: Color(0xFF4C1D95)),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -472,25 +630,43 @@ class _OutfitScreenState extends State<OutfitScreen> {
                       itemCount: widget.items.length,
                       itemBuilder: (context, index) {
                         final item = widget.items[index];
-                        return Column(
-                          children: [
-                            Expanded(
-                              child: item.imageUrl != null
-                                  ? Image.network(
-                                      item.imageUrl!,
-                                      fit: BoxFit.cover,
-                                    )
-                                  : Container(
-                                      color: Colors.grey[300],
-                                      child: const Icon(
-                                        Icons.checkroom,
-                                        size: 40,
+                        return Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          clipBehavior: Clip.antiAlias,
+                          child: Column(
+                            children: [
+                              Expanded(
+                                child: item.imageUrl != null
+                                    ? Image.network(
+                                        item.imageUrl!,
+                                        fit: BoxFit.cover,
+                                        width: double.infinity,
+                                      )
+                                    : Container(
+                                        color: vestiPrimaryLight,
+                                        child: const Icon(
+                                          Icons.checkroom,
+                                          size: 40,
+                                          color: vestiPrimary,
+                                        ),
                                       ),
-                                    ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(item.name),
-                          ],
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 8,
+                                ),
+                                child: Text(
+                                  item.name,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         );
                       },
                     ),
@@ -499,14 +675,23 @@ class _OutfitScreenState extends State<OutfitScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                ElevatedButton.icon(
+                OutlinedButton.icon(
                   onPressed: hasVoted ? null : () => _rateOutfit(-1),
-                  icon: const Icon(Icons.thumb_down, color: Colors.red),
+                  icon: const Icon(Icons.thumb_down, color: Colors.redAccent),
                   label: const Text('Bana göre değil'),
+                  style: OutlinedButton.styleFrom(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 14,
+                      horizontal: 16,
+                    ),
+                  ),
                 ),
                 ElevatedButton.icon(
                   onPressed: hasVoted ? null : () => _rateOutfit(1),
-                  icon: const Icon(Icons.favorite, color: Colors.pink),
+                  icon: const Icon(Icons.favorite, color: Colors.white),
                   label: const Text('Beğendim'),
                 ),
               ],
@@ -611,12 +796,32 @@ class _AddClothingScreenState extends State<AddClothingScreen> {
             GestureDetector(
               onTap: _pickImage,
               child: Container(
-                height: 200,
+                height: 220,
                 width: double.infinity,
-                color: Colors.grey[300],
+                decoration: BoxDecoration(
+                  color: vestiPrimaryLight,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                clipBehavior: Clip.antiAlias,
                 child: _pickedImageBytes != null
                     ? Image.memory(_pickedImageBytes!, fit: BoxFit.cover)
-                    : const Center(child: Text('Fotoğraf seçmek için dokun')),
+                    : Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(
+                              Icons.add_a_photo_outlined,
+                              size: 40,
+                              color: vestiPrimary,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Fotoğraf seçmek için dokun',
+                              style: TextStyle(color: Colors.grey[600]),
+                            ),
+                          ],
+                        ),
+                      ),
               ),
             ),
             const SizedBox(height: 20),
@@ -624,26 +829,31 @@ class _AddClothingScreenState extends State<AddClothingScreen> {
               controller: _controller,
               decoration: const InputDecoration(
                 labelText: 'Kıyafet adı (boş bırakırsan AI bulur)',
-                border: OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: isSaving ? null : _saveClothing,
-              child: isSaving
-                  ? Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const SizedBox(
-                          height: 16,
-                          width: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                        const SizedBox(width: 10),
-                        Text(statusText),
-                      ],
-                    )
-                  : const Text('Ekle'),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: isSaving ? null : _saveClothing,
+                child: isSaving
+                    ? Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const SizedBox(
+                            height: 16,
+                            width: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Text(statusText),
+                        ],
+                      )
+                    : const Text('Ekle'),
+              ),
             ),
           ],
         ),
