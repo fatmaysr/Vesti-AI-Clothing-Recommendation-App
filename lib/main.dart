@@ -718,7 +718,11 @@ class _AddClothingScreenState extends State<AddClothingScreen> {
 
   Future<void> _pickImage() async {
     final picker = ImagePicker();
-    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+    final pickedFile = await picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 1024, // fotoğrafı en fazla 1024px genişliğe indir
+      imageQuality: 75, // %75 kalite yeterli, gözle fark edilmez ama boyutu ciddi düşürür
+    );
 
     if (pickedFile != null) {
       final bytes = await pickedFile.readAsBytes();
