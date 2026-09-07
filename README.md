@@ -224,3 +224,7 @@ Bu proje kişisel bir öğrenme projesi olarak geliştirilmiştir.
 ##  Geliştirici
 
 Bu proje, mobil uygulama geliştirmeyi öğrenme sürecinin bir parçası olarak sıfırdan geliştirilmiştir — Flutter kurulumundan AI entegrasyonuna, backend mimarisinden kullanıcı kimlik doğrulamasına kadar tüm katmanlar dahil.
+
+## İndirme Linki 
+
+https://github.com/fatmaysr/Vesti-AI-Clothing-Recommendation-App/releases/download/v1.0.0/app-release.apk
