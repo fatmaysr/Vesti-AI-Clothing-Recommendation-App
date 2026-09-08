@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+
 import '../supabase_client.dart';
 import '../models.dart';
 import 'outfit_screens.dart';
+
+import 'package:shared_preferences/shared_preferences.dart';
 
 class WardrobeScreen extends StatefulWidget {
   const WardrobeScreen({super.key});
@@ -16,10 +19,53 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
   bool isGeneratingOutfit = false;
   String? selectedFilter; // null = Tümü
 
+  String selectedCityName = 'Kocaeli';
+  double selectedLat = 40.85;
+  double selectedLon = 29.88;
+
   @override
   void initState() {
     super.initState();
+    _loadSelectedCity();
     _loadClothes();
+  }
+
+  Future<void> _loadSelectedCity() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedName = prefs.getString('selected_city_name');
+    final savedLat = prefs.getDouble('selected_city_lat');
+    final savedLon = prefs.getDouble('selected_city_lon');
+
+    if (savedName != null && savedLat != null && savedLon != null) {
+      setState(() {
+        selectedCityName = savedName;
+        selectedLat = savedLat;
+        selectedLon = savedLon;
+      });
+    }
+  }
+
+  Future<void> _saveSelectedCity(CityOption city) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('selected_city_name', city.name);
+    await prefs.setDouble('selected_city_lat', city.lat);
+    await prefs.setDouble('selected_city_lon', city.lon);
+  }
+
+  Future<void> _pickCity() async {
+    final chosen = await showDialog<CityOption>(
+      context: context,
+      builder: (context) => const _CitySearchDialog(),
+    );
+
+    if (chosen != null) {
+      setState(() {
+        selectedCityName = chosen.name;
+        selectedLat = chosen.lat;
+        selectedLon = chosen.lon;
+      });
+      _saveSelectedCity(chosen);
+    }
   }
 
   Future<void> _loadClothes() async {
@@ -36,7 +82,9 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
 
   List<ClothingItem> get filteredClothes {
     if (selectedFilter == null) return clothes;
-    return clothes.where((item) => item.clothingType == selectedFilter).toList();
+    return clothes
+        .where((item) => item.clothingType == selectedFilter)
+        .toList();
   }
 
   Widget _buildFilterChip(String label, String? value) {
@@ -60,7 +108,9 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
         backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
-          side: BorderSide(color: isSelected ? vestiPrimary : Colors.grey[300]!),
+          side: BorderSide(
+            color: isSelected ? vestiPrimary : Colors.grey[300]!,
+          ),
         ),
       ),
     );
@@ -85,7 +135,10 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
         title: const Text('Kıyafeti sil'),
         content: Text('${item.name} silinsin mi?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Vazgeç')),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Vazgeç'),
+          ),
           TextButton(
             onPressed: () async {
               await supabase.from('clothing_items').delete().eq('id', item.id);
@@ -141,7 +194,9 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
   Future<void> _generateOutfit() async {
     if (clothes.length < 2) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Kombin oluşturmak için en az 2 kıyafet ekle.')),
+        const SnackBar(
+          content: Text('Kombin oluşturmak için en az 2 kıyafet ekle.'),
+        ),
       );
       return;
     }
@@ -157,7 +212,10 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
     });
 
     try {
-      final temperature = await fetchCurrentTemperature();
+      final temperature = await fetchCurrentTemperature(
+        selectedLat,
+        selectedLon,
+      );
 
       final prefsData = await supabase
           .from('style_preferences')
@@ -167,13 +225,15 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
       final preferencesList = prefsData as List;
 
       final itemsPayload = clothes
-          .map((item) => {
-                'id': item.id,
-                'name': item.name,
-                'category': item.category,
-                'color': item.color,
-                'style': item.style,
-              })
+          .map(
+            (item) => {
+              'id': item.id,
+              'name': item.name,
+              'category': item.category,
+              'color': item.color,
+              'style': item.style,
+            },
+          )
           .toList();
 
       final response = await supabase.functions.invoke(
@@ -191,17 +251,23 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
       final List<dynamic> selectedIds = result['itemIds'] ?? [];
       final String reason = result['reason'] ?? '';
 
-      final selectedItems = clothes.where((item) => selectedIds.contains(item.id)).toList();
+      final selectedItems = clothes
+          .where((item) => selectedIds.contains(item.id))
+          .toList();
 
       if (mounted) {
         Navigator.push(
           context,
-          MaterialPageRoute(builder: (context) => OutfitScreen(items: selectedItems, reason: reason)),
+          MaterialPageRoute(
+            builder: (context) =>
+                OutfitScreen(items: selectedItems, reason: reason),
+          ),
         );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Kombin oluşturulamadı: $e')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Kombin oluşturulamadı: $e')));
       }
     } finally {
       if (mounted) {
@@ -219,12 +285,19 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
         title: const Text('Dolabım'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.location_on_outlined),
+            tooltip: selectedCityName,
+            onPressed: _pickCity,
+          ),
+          IconButton(
             icon: const Icon(Icons.favorite_border),
             tooltip: 'Kombinlerim',
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => const SavedOutfitsScreen()),
+                MaterialPageRoute(
+                  builder: (context) => const SavedOutfitsScreen(),
+                ),
               );
             },
           ),
@@ -254,10 +327,17 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
                           ? const SizedBox(
                               height: 16,
                               width: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
                             )
                           : const Icon(Icons.auto_awesome),
-                      label: Text(isGeneratingOutfit ? 'Kombin hazırlanıyor...' : 'Bugünün Kombini'),
+                      label: Text(
+                        isGeneratingOutfit
+                            ? 'Kombin hazırlanıyor...'
+                            : 'Bugünün Kombini',
+                      ),
                     ),
                   ),
                 ),
@@ -268,7 +348,8 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     children: [
                       _buildFilterChip('Tümü', null),
-                      for (final type in clothingTypes) _buildFilterChip(type, type),
+                      for (final type in clothingTypes)
+                        _buildFilterChip(type, type),
                     ],
                   ),
                 ),
@@ -279,19 +360,35 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.checkroom_outlined, size: 64, color: Colors.grey[300]),
+                              Icon(
+                                Icons.checkroom_outlined,
+                                size: 64,
+                                color: Colors.grey[300],
+                              ),
                               const SizedBox(height: 16),
-                              Text('Henüz kıyafet yok.', style: TextStyle(fontSize: 16, color: Colors.grey[500])),
+                              Text(
+                                'Henüz kıyafet yok.',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  color: Colors.grey[500],
+                                ),
+                              ),
                               const SizedBox(height: 4),
-                              Text('Aşağıdaki + butonuyla ekleyebilirsin.',
-                                  style: TextStyle(fontSize: 13, color: Colors.grey[400])),
+                              Text(
+                                'Aşağıdaki + butonuyla ekleyebilirsin.',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.grey[400],
+                                ),
+                              ),
                             ],
                           ),
                         )
                       : ListView.separated(
                           padding: const EdgeInsets.all(12),
                           itemCount: filteredClothes.length,
-                          separatorBuilder: (context, index) => const SizedBox(height: 8),
+                          separatorBuilder: (context, index) =>
+                              const SizedBox(height: 8),
                           itemBuilder: (context, index) {
                             final item = filteredClothes[index];
                             final subtitleParts = [
@@ -302,21 +399,42 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
                             final subtitle = subtitleParts.join(' • ');
 
                             return Container(
-                              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(16),
+                              ),
                               child: ListTile(
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 4,
+                                ),
                                 leading: CircleAvatar(
                                   radius: 26,
                                   backgroundColor: vestiPrimaryLight,
-                                  backgroundImage: item.imageUrl != null ? NetworkImage(item.imageUrl!) : null,
+                                  backgroundImage: item.imageUrl != null
+                                      ? NetworkImage(item.imageUrl!)
+                                      : null,
                                   child: item.imageUrl == null
-                                      ? const Icon(Icons.checkroom, color: vestiPrimary)
+                                      ? const Icon(
+                                          Icons.checkroom,
+                                          color: vestiPrimary,
+                                        )
                                       : null,
                                 ),
-                                title: Text(item.name, style: const TextStyle(fontWeight: FontWeight.w600)),
-                                subtitle: subtitle.isNotEmpty ? Text(subtitle) : null,
+                                title: Text(
+                                  item.name,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                subtitle: subtitle.isNotEmpty
+                                    ? Text(subtitle)
+                                    : null,
                                 trailing: IconButton(
-                                  icon: const Icon(Icons.close, color: Colors.redAccent),
+                                  icon: const Icon(
+                                    Icons.close,
+                                    color: Colors.redAccent,
+                                  ),
                                   onPressed: () => _confirmDelete(item),
                                 ),
                               ),
@@ -330,6 +448,78 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
         onPressed: _goToAddClothing,
         child: const Icon(Icons.add),
       ),
+    );
+  }
+}
+
+// Yerel il listesi içinde arama yapan basit bir seçim penceresi (internet gerektirmez)
+class _CitySearchDialog extends StatefulWidget {
+  const _CitySearchDialog();
+
+  @override
+  State<_CitySearchDialog> createState() => _CitySearchDialogState();
+}
+
+class _CitySearchDialogState extends State<_CitySearchDialog> {
+  final TextEditingController _searchController = TextEditingController();
+  late List<CityOption> filteredCities;
+
+  @override
+  void initState() {
+    super.initState();
+    filteredCities = turkishCities;
+  }
+
+  void _filter(String query) {
+    setState(() {
+      filteredCities = turkishCities
+          .where(
+            (city) => city.name.toLowerCase().contains(query.toLowerCase()),
+          )
+          .toList();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: const Text('Şehir seç'),
+      content: SizedBox(
+        width: double.maxFinite,
+        height: 400,
+        child: Column(
+          children: [
+            TextField(
+              controller: _searchController,
+              decoration: const InputDecoration(
+                hintText: 'İl ara...',
+                prefixIcon: Icon(Icons.search),
+              ),
+              onChanged: _filter,
+            ),
+            const SizedBox(height: 12),
+            Expanded(
+              child: ListView.builder(
+                itemCount: filteredCities.length,
+                itemBuilder: (context, index) {
+                  final city = filteredCities[index];
+                  return ListTile(
+                    title: Text(city.name),
+                    onTap: () => Navigator.pop(context, city),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Vazgeç'),
+        ),
+      ],
     );
   }
 }
