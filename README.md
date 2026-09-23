@@ -47,6 +47,22 @@ Proje, fikir aşamasından çalışan bir Android uygulamasına kadar **tek baş
 * Kullanıcı verilerinin birbirinden izole edilmesi
 * Gemini API anahtarının istemci tarafında tutulmaması
 
+### Ekran Görüntüleri
+
+<table>
+  <tr>
+    <td><img src="https://github.com/user-attachments/assets/79621acc-668b-4d82-9d89-e1a080a5513d" width="300"/></td>
+    <td><img src="https://github.com/user-attachments/assets/d844ba2d-32e7-44db-af5a-42e1dfb4abf5" width="300"/></td>
+    <td><img src="https://github.com/user-attachments/assets/8ce0ab4e-fa2e-4df7-a223-e3863f28e7f0" width="300"/></td>
+  </tr>
+  <tr>
+    <td><img src="https://github.com/user-attachments/assets/b5e03be0-f143-478d-a528-b5ab22b9dad6"width="300"/></td>
+    <td><img src="https://github.com/user-attachments/assets/982d4ba5-0ff4-4cb9-8cad-7d01598b0e83"  width="300"/></td>
+    <td><img src="https://github.com/user-attachments/assets/f3c29923-76d3-4afe-8645-0581ee6ccb5b" width="300"/></td>
+  </tr>
+</table>
+
+
 ---
 
 ## 🛠️ Teknolojiler
